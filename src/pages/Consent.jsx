@@ -29,7 +29,7 @@ export default function Consent() {
 
   return <section className="page-intro"><p className="eyebrow">YOUR CHOICE, AT EVERY STEP</p><h1>Before we begin</h1><div className="card">
     <p>Assessments are voluntary screening tools, not a diagnosis. You can choose whether to complete one.</p>
-    <p>We store your account profile and consent choices. When the assessment and referral features are available, we will store the answers, results and referral information you submit.</p>
+    <p>We store your account profile, consent choices, assessment answers and screening results. When the referral feature is available, we will also store the referral information you submit.</p>
     <p>Your assessment results are visible to you, and to a professional you are referred to only if you allow results sharing. Administrators have access for platform oversight. Assigned professionals can see your profile under the current access policies.</p>
     <p>You can withdraw optional sharing at any time on the Privacy page. This updates active referrals, but cannot undo information already seen.</p>
     <p>MindBridge is not an emergency service. For urgent-help guidance, see the “Need urgent help?” banner at the bottom of the page. Its emergency contact is awaiting verification.</p>

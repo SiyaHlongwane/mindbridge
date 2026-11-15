@@ -6,7 +6,10 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
-import { Dashboard, Assessment, Results, Support, Referrals, ProfessionalDashboard, Admin, NotFound } from './pages/PlaceholderPages'
+import { Support, Referrals, ProfessionalDashboard, Admin, NotFound } from './pages/PlaceholderPages'
+import Dashboard from './pages/Dashboard'
+import Assessment from './pages/Assessment'
+import Results from './pages/Results'
 import Consent from './pages/Consent'
 import Privacy from './pages/Privacy'
 
@@ -20,7 +23,8 @@ export default function App() {
     <Route element={<ProtectedRoute />}>
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/assessment" element={<Assessment />} />
-      <Route path="/results" element={<Results />} />
+      <Route path="/results" element={<Dashboard />} />
+      <Route path="/results/:id" element={<Results />} />
       <Route path="/support" element={<Support />} />
       <Route path="/referrals" element={<Referrals />} />
     </Route>
