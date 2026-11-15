@@ -96,6 +96,10 @@ end $$;
 drop trigger if exists create_profile_on_signup on auth.users;
 create trigger create_profile_on_signup after insert on auth.users for each row execute function public.create_profile();
 
+insert into public.profiles(id, full_name, role)
+select u.id, u.raw_user_meta_data->>'full_name', 'individual' from auth.users u
+on conflict (id) do nothing;
+
 create or replace function public.guard_profile_role() returns trigger
 language plpgsql set search_path = public
 as $$ begin
