@@ -57,11 +57,16 @@ create unique index if not exists referrals_one_open_service on public.referrals
 create table if not exists public.follow_ups (
   id uuid primary key default gen_random_uuid(),
   referral_id uuid not null references public.referrals(id) on delete cascade,
-  author_id uuid not null default auth.uid() references public.profiles(id),
+  author_id uuid default auth.uid() references public.profiles(id) on delete set null,
   note text,
   outcome text,
   created_at timestamptz not null default now()
 );
+alter table public.follow_ups alter column author_id drop not null;
+alter table public.follow_ups drop constraint if exists follow_ups_author_id_fkey;
+alter table public.follow_ups add constraint follow_ups_author_id_fkey
+  foreign key (author_id) references public.profiles(id) on delete set null;
+
 create table if not exists public.audit_logs (
   id bigserial primary key,
   actor_id uuid,
