@@ -95,7 +95,7 @@ create or replace function public.guard_profile_role() returns trigger
 language plpgsql set search_path = public
 as $$ begin
   if new.role is distinct from old.role and public.app_role() is distinct from 'admin'
-    and not (auth.uid() is null and current_user = 'postgres') then
+    and auth.uid() is not null then
     raise exception 'Only an administrator can change roles' using errcode = '42501';
   end if;
   return new;
@@ -106,7 +106,7 @@ create trigger guard_profile_role before update on public.profiles for each row 
 create or replace function public.guard_referral_update() returns trigger
 language plpgsql set search_path = public
 as $$ begin
-  if public.app_role() = 'admin' or (auth.uid() is null and current_user = 'postgres') then
+  if public.app_role() = 'admin' or auth.uid() is null then
     new.updated_at := now();
     return new;
   end if;
@@ -209,6 +209,8 @@ drop policy if exists audit_admin_read on public.audit_logs;
 create policy audit_admin_read on public.audit_logs for select to authenticated using (public.app_role() = 'admin');
 
 grant usage on schema public to authenticated;
+revoke all on public.profiles, public.consents, public.assessments, public.support_services,
+  public.referrals, public.follow_ups, public.audit_logs from public, anon;
 grant select, update on public.profiles to authenticated;
 grant select, insert, update, delete on public.consents, public.referrals, public.support_services to authenticated;
 grant select, insert on public.assessments, public.follow_ups to authenticated;
