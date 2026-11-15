@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../context/auth'
 import { getAssessment } from '../services/assessmentService'
 import { hasSelfHarmResponse, instruments, scoreAssessment } from '../data/instruments'
-import { crisisContact } from '../data/safety'
+import SafetyPanel from '../components/SafetyPanel'
 import Button from '../components/Button'
 
 const meanings = {
@@ -34,7 +34,7 @@ export default function Results() {
   const instrument = instruments[row.instrument]
   const lowerBand = ['minimal', 'mild'].includes(score.severity)
   return <section className="page-intro">
-    {hasSelfHarmResponse(row.instrument, row.answers) && <aside className="safety-panel" aria-labelledby="safety-title"><h2 id="safety-title">You don’t have to face this alone</h2><p>Your answer about thoughts of death or self-harm deserves care, whatever your total score. Please reach out to someone you trust or a qualified professional now. If you feel unable to stay safe, seek immediate in-person emergency help.</p><p><strong>{crisisContact}</strong><br />This contact is awaiting verification. MindBridge is not an emergency service and does not monitor your answers in real time.</p><Link className="button" to="/support">Explore human support</Link></aside>}
+    {hasSelfHarmResponse(row.instrument, row.answers) && <SafetyPanel />}
     <p className="eyebrow">YOUR SCREENING RESULT</p><h1>{instrument.name}: a snapshot of your {instrument.focus}</h1><div className="card"><p className="result-score">{score.total}<span> / {instrument.max}</span></p><h2>{score.severity} symptom range</h2><p><strong>This is a screening result, not a diagnosis.</strong></p><p>{meanings[score.severity]}</p><p className="muted">Completed {new Date(row.created_at).toLocaleString()}. Scores describe reported symptoms, not who you are.</p></div>
     <div className="card next-steps"><h2>Your next step</h2>{lowerBand ? <p>Consider self-help resources and community support. If you would like to check in again, retake the assessment in 2 weeks. You can seek professional support at any score.</p> : <p>Consider speaking with a primary care or mental health professional. They can discuss your experiences with you and help decide what support is appropriate.</p>}<div className="actions"><Link className="button" to="/support">Explore support options</Link><Link className="button button-secondary" to="/dashboard">Back to dashboard</Link></div></div>
   </section>
