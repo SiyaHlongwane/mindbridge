@@ -139,6 +139,43 @@ end $$;
 drop trigger if exists guard_referral_update on public.referrals;
 create trigger guard_referral_update before update on public.referrals for each row execute function public.guard_referral_update();
 
+create or replace function public.next_referral_professional() returns uuid
+language plpgsql security definer set search_path = public
+as $$ declare chosen uuid; begin
+  perform pg_advisory_xact_lock(7182407);
+  select p.id into chosen from public.profiles p where p.role = 'professional'
+  order by (select count(*) from public.referrals r where r.professional_id = p.id
+    and r.status not in ('declined','follow_up_completed','cancelled','unable_to_contact')), p.id
+  limit 1;
+  return chosen;
+end $$;
+revoke all on function public.next_referral_professional() from public, anon, authenticated;
+
+create or replace function public.assign_referral_professional() returns trigger
+language plpgsql security definer set search_path = public
+as $$ begin
+  if auth.uid() is not null and public.app_role() is distinct from 'admin'
+    and new.professional_id is not null then
+    raise exception 'Clients cannot choose a professional' using errcode = '42501';
+  end if;
+  if new.professional_id is null then
+    new.professional_id := public.next_referral_professional();
+  end if;
+  return new;
+end $$;
+drop trigger if exists assign_referral_professional on public.referrals;
+create trigger assign_referral_professional before insert on public.referrals
+  for each row execute function public.assign_referral_professional();
+
+do $$ declare referral_id uuid; begin
+  for referral_id in select id from public.referrals where professional_id is null
+    and status not in ('declined','follow_up_completed','cancelled','unable_to_contact')
+    order by created_at, id loop
+    update public.referrals set professional_id = public.next_referral_professional()
+      where id = referral_id;
+  end loop;
+end $$;
+
 create or replace function public.touch_consent() returns trigger
 language plpgsql set search_path = public
 as $$ begin new.updated_at := now(); return new; end $$;
@@ -173,7 +210,7 @@ alter table public.audit_logs enable row level security;
 drop policy if exists profiles_read on public.profiles;
 create policy profiles_read on public.profiles for select to authenticated using (
   id = auth.uid() or public.app_role() = 'admin' or
-  (public.app_role() = 'professional' and exists (select 1 from public.referrals r where r.user_id = profiles.id and r.professional_id = auth.uid()))
+  (public.app_role() = 'professional' and exists (select 1 from public.referrals r where r.user_id = profiles.id and r.professional_id = auth.uid() and r.share_contact))
 );
 drop policy if exists profiles_update on public.profiles;
 create policy profiles_update on public.profiles for update to authenticated using (id = auth.uid() or public.app_role() = 'admin') with check (id = auth.uid() or public.app_role() = 'admin');
@@ -199,7 +236,7 @@ create policy services_admin on public.support_services for all to authenticated
 drop policy if exists referrals_read on public.referrals;
 create policy referrals_read on public.referrals for select to authenticated using (user_id = auth.uid() or public.app_role() = 'admin' or (professional_id = auth.uid() and public.app_role() = 'professional'));
 drop policy if exists referrals_insert on public.referrals;
-create policy referrals_insert on public.referrals for insert to authenticated with check (public.app_role() = 'admin' or (user_id = auth.uid() and status = 'pending' and professional_id is null));
+create policy referrals_insert on public.referrals for insert to authenticated with check (public.app_role() = 'admin' or (user_id = auth.uid() and status = 'pending'));
 drop policy if exists referrals_update on public.referrals;
 create policy referrals_update on public.referrals for update to authenticated using (user_id = auth.uid() or public.app_role() = 'admin' or (professional_id = auth.uid() and public.app_role() = 'professional')) with check (user_id = auth.uid() or public.app_role() = 'admin' or (professional_id = auth.uid() and public.app_role() = 'professional'));
 drop policy if exists referrals_delete on public.referrals;
