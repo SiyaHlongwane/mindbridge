@@ -6,7 +6,9 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
-import { Dashboard, Assessment, Results, Support, Referrals, Privacy, ProfessionalDashboard, Admin, NotFound } from './pages/PlaceholderPages'
+import { Dashboard, Assessment, Results, Support, Referrals, ProfessionalDashboard, Admin, NotFound } from './pages/PlaceholderPages'
+import Consent from './pages/Consent'
+import Privacy from './pages/Privacy'
 
 export default function App() {
   return <BrowserRouter><AuthProvider><a className="skip-link" href="#main">Skip to content</a><Navbar /><main id="main" className="container"><Routes>
@@ -14,6 +16,7 @@ export default function App() {
     <Route path="/login" element={<Login />} />
     <Route path="/register" element={<Register />} />
     <Route path="/privacy" element={<Privacy />} />
+    <Route element={<ProtectedRoute requireConsent={false} />}><Route path="/consent" element={<Consent />} /></Route>
     <Route element={<ProtectedRoute />}>
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/assessment" element={<Assessment />} />

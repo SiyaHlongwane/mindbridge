@@ -1,9 +1,30 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { AuthContext } from './auth'
+import { getConsentRecords } from '../services/consentService'
+
+async function loadConsents(id) {
+  const rows = await getConsentRecords(id)
+  return { userId: id, values: Object.fromEntries(rows.map(row => [row.consent_type, row.granted])), dates: Object.fromEntries(rows.map(row => [row.consent_type, row.updated_at])), error: '' }
+}
 
 export function AuthProvider({ children }) {
   const [auth, setAuth] = useState({ session: null, profile: null, role: 'individual', loading: Boolean(supabase), profileError: '' })
+  const [consentState, setConsentState] = useState({ userId: null, values: {}, dates: {}, error: '' })
+  const userId = auth.session?.user.id
+
+  useEffect(() => {
+    let active = true
+    const request = userId ? loadConsents(userId) : Promise.resolve({ userId: null, values: {}, dates: {}, error: '' })
+    request.then(state => { if (active) setConsentState(state) }).catch(error => {
+      if (active) setConsentState({ userId, values: {}, dates: {}, error: error.message || 'Unable to load your consent preferences.' })
+    })
+    return () => { active = false }
+  }, [userId])
+
+  async function refreshConsents() {
+    if (userId) setConsentState(await loadConsents(userId))
+  }
 
   useEffect(() => {
     let active = true
@@ -45,6 +66,11 @@ export function AuthProvider({ children }) {
     ...auth,
     user: auth.session?.user ?? null,
     configured: Boolean(supabase),
+    consents: consentState.userId === userId ? consentState.values : {},
+    consentDates: consentState.userId === userId ? consentState.dates : {},
+    consentError: consentState.userId === userId ? consentState.error : '',
+    consentsLoading: Boolean(userId && consentState.userId !== userId),
+    refreshConsents,
     signUp: (email, password, fullName) => client().auth.signUp({ email, password, options: { data: { full_name: fullName } } }),
     signIn: (email, password) => client().auth.signInWithPassword({ email, password }),
     signOut: () => client().auth.signOut(),
