@@ -30,7 +30,7 @@ export default function Consent() {
   return <section className="page-intro"><p className="eyebrow">YOUR CHOICE, AT EVERY STEP</p><h1>Before we begin</h1><div className="card">
     <p>Assessments are voluntary screening tools, not a diagnosis. You can choose whether to complete one.</p>
     <p>We store your account profile, consent choices, assessment answers, screening results and the referral information you submit, including optional notes and sharing choices.</p>
-    <p>Your assessment results are visible to you, and to a professional you are referred to only if you allow results sharing. Administrators have access for platform oversight. Assigned professionals can see your profile under the current access policies.</p>
+    <p>Your assessment results are visible to you, and to an assigned professional only when a referral to them has results sharing on. Your profile name is visible to an assigned professional only when a referral to them has contact sharing on. Administrators have access for platform oversight.</p>
     <p>You can withdraw optional sharing at any time on the Privacy page. This updates active referrals, but cannot undo information already seen.</p>
     <p>MindBridge is not an emergency service. For urgent-help guidance, see the “Need urgent help?” banner at the bottom of the page. Its emergency contact is awaiting verification.</p>
     {consentsLoading ? <p role="status">Loading your preferences…</p> : <form className="consent-form" onSubmit={submit}>
@@ -38,7 +38,7 @@ export default function Consent() {
       <label className="check-label"><input type="checkbox" name="terms" required defaultChecked={consents.terms === true} disabled={busy} />I understand and agree</label>
       <label className="check-label"><input type="checkbox" name="share_results" defaultChecked={consents.share_results === true} disabled={busy} />Share my assessment results with professionals I'm referred to</label>
       <label className="check-label"><input type="checkbox" name="share_contact" defaultChecked={consents.share_contact === true} disabled={busy} />Share my name/contact with professionals I'm referred to</label>
-      <p className="muted">Sharing is optional. The current profile-access policy allows assigned professionals to view your profile name even when contact sharing is off.</p>
+      <p className="muted">Sharing is optional. Your referral sharing choices control assigned professionals’ access to your profile name and assessment results.</p>
       {error && <p className="error" role="alert">{error}</p>}
       <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Continue'}</Button>
     </form>}

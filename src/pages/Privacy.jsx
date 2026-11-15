@@ -33,7 +33,7 @@ export default function Privacy() {
   function date(type) { return consentDates[type] ? new Date(consentDates[type]).toLocaleString() : 'Not recorded' }
   return <section className="page-intro"><p className="eyebrow">YOUR INFORMATION, YOUR CHOICES</p><h1>Privacy comes first.</h1><div className="card">
     <p>We store your profile, consent choices, assessment answers, screening results and the referral information you choose to submit, including optional notes and sharing choices. Screening is voluntary and is not a diagnosis.</p>
-    <p>You control optional assessment-results sharing with assigned professionals. Administrators have oversight access. Assigned professionals can currently view your profile name regardless of the contact-sharing preference; that preference is not a guarantee of profile-name confidentiality.</p>
+    <p>You control optional sharing with assigned professionals. They can access your profile name only when a referral assigned to them has contact sharing on, and assessment results only when a referral assigned to them has results sharing on. Administrators have oversight access.</p>
     <p>Withdrawing sharing updates active referrals. It cannot remove information already seen by a professional. MindBridge is not an emergency service; see the urgent-help banner below.</p>
     {loading || (user && consentsLoading) ? <p role="status">Loading your preferences…</p> : !user ? <p><Link to="/login">Log in</Link> to view and manage your consent preferences.</p> : <>
       {consentError && <div className="error" role="alert">{consentError} <Button onClick={retry} disabled={busy}>Retry loading</Button></div>}
