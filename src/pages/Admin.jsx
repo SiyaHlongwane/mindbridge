@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/auth'
-import { getAdminMetrics, listAdminServices, saveService, setServiceFlag, listRecentAuditLogs } from '../services/adminService'
+import { getAdminMetrics, listAdminServices, listAdminReferrals, saveService, setServiceFlag, listRecentAuditLogs } from '../services/adminService'
 import { TIERS } from '../services/supportService'
 import { STATUS } from '../services/referralService'
 import Button from '../components/Button'
@@ -33,8 +33,8 @@ export default function Admin() {
   const [message, setMessage] = useState('')
   useEffect(() => {
     let active = true
-    Promise.allSettled([getAdminMetrics(), listAdminServices(), listRecentAuditLogs()]).then(results => {
-      if (active) setState({ userId: user.id, metrics: results[0], services: results[1], audit: results[2] })
+    Promise.allSettled([getAdminMetrics(), listAdminServices(), listRecentAuditLogs(), listAdminReferrals()]).then(results => {
+      if (active) setState({ userId: user.id, metrics: results[0], services: results[1], audit: results[2], referrals: results[3] })
     })
     return () => { active = false }
   }, [user.id, attempt])
@@ -49,8 +49,9 @@ export default function Admin() {
   function loadError(result) { return <p className="error" role="alert">{result.reason?.message || 'Unable to load this section. Please refresh.'}</p> }
   if (state?.userId !== user.id) return <p role="status">Loading administration…</p>
   const metrics = state.metrics.value
-  return <section className="dashboard-page"><p className="eyebrow">PLATFORM OVERSIGHT</p><h1>Administration</h1><p>Aggregate activity, support listings and recent audit events.</p><Button className="button-secondary" onClick={refresh}>Refresh administration</Button>
+  return <section className="dashboard-page"><p className="eyebrow">PLATFORM OVERSIGHT</p><h1>Administration</h1><p>Aggregate activity, user referrals, support listings and recent audit events.</p><Button className="button-secondary" onClick={refresh}>Refresh administration</Button>
     <section className="card dashboard-section"><h2>Metrics</h2><p className="muted">Counts only; no personal information is fetched for these metrics.</p>{state.metrics.status === 'rejected' ? loadError(state.metrics) : <div className="admin-metrics"><div><h3>Users by role</h3><ul>{Object.entries(metrics.users).map(([role, count]) => <li key={role}>{role}: {count}</li>)}</ul></div><div><h3>Activity</h3><p>Assessments: {metrics.assessments}<br />Follow-ups: {metrics.followUps}</p></div><div><h3>Referrals by status</h3><ul>{Object.entries(metrics.referrals).map(([status, count]) => <li key={status}>{STATUS[status].label}: {count}</li>)}</ul></div></div>}</section>
+    <section className="card dashboard-section"><h2>User referrals</h2>{state.referrals.status === 'rejected' ? loadError(state.referrals) : state.referrals.value.length === 0 ? <p>No referrals have been made yet.</p> : <div className="table-scroll" tabIndex={0} role="region" aria-label="User referrals"><table><caption>All referrals, newest first</caption><thead><tr><th scope="col">User</th><th scope="col">Service</th><th scope="col">Status</th><th scope="col">Created</th></tr></thead><tbody>{state.referrals.value.map(referral => <tr key={referral.id}><td>{referral.user?.full_name || referral.user_id}</td><td>{referral.service?.name || 'Service details unavailable'}</td><td>{STATUS[referral.status]?.label || referral.status}</td><td>{new Date(referral.created_at).toLocaleString()}</td></tr>)}</tbody></table></div>}</section>
     <section className="card dashboard-section"><h2>Support services management</h2><p id="verification-guidance" className="notice">Only mark verified after confirming details with the provider.</p>{message && <p className="notice" role="status">{message}</p>}{error && <p className="error" role="alert">{error}</p>}{state.services.status === 'rejected' ? loadError(state.services) : state.services.value.length === 0 ? <p>No services yet. Add the first listing below.</p> : <div className="table-scroll" tabIndex={0} role="region" aria-label="All support services"><table><caption>All listings, including inactive services</caption><thead><tr><th scope="col">Name</th><th scope="col">Tier</th><th scope="col">Active</th><th scope="col">Verified</th><th scope="col">Edit</th></tr></thead><tbody>{state.services.value.map(service => <tr key={service.id}><td>{service.name}</td><td>{TIERS.find(tier => tier.id === service.tier)?.label || service.tier}</td>{['active','verified'].map(flag => <td key={flag}><input type="checkbox" checked={service[flag]} disabled={busy} aria-label={`${flag === 'active' ? 'Active' : 'Verified'}: ${service.name}`} aria-describedby={flag === 'verified' ? 'verification-guidance' : undefined} onChange={() => toggle(service, flag)} /></td>)}<td><Button className="button-secondary" disabled={busy} onClick={() => setEditing(service)}>Edit<span className="admin-sr-only"> {service.name}</span></Button></td></tr>)}</tbody></table></div>}
       {editing && <ServiceForm key={editing.id} service={editing} onSaved={saved} onCancel={() => setEditing(null)} />}<ServiceForm onSaved={saved} />
     </section>

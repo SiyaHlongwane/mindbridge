@@ -33,6 +33,14 @@ export async function listAdminServices() {
   return data
 }
 
+export async function listAdminReferrals() {
+  const { data, error } = await client().from('referrals')
+    .select('id, user_id, status, created_at, service:support_services(name), user:profiles!referrals_user_id_fkey(full_name)')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
 export async function saveService(id, values) {
   const fields = { name: values.name.trim(), tier: values.tier, description: values.description.trim() || null, contact: values.contact.trim() || null, website: values.website.trim() || null }
   if (!fields.name) throw new Error('Enter a service name.')
