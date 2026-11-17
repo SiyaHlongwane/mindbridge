@@ -31,7 +31,7 @@ export default function App() {
       <Route path="/results/:id" element={<Results />} />
       <Route path="/support" element={<Support />} />
     </Route>
-    <Route element={<ProtectedRoute allowedRoles={['individual']} />}><Route path="/referrals" element={<Referrals />} /></Route>
+    <Route element={<ProtectedRoute allowedRoles={['individual', 'professional']} />}><Route path="/referrals" element={<Referrals />} /></Route>
     <Route element={<ProtectedRoute allowedRoles={['professional', 'admin']} />}><Route path="/professional" element={<ProfessionalDashboard />} /></Route>
     <Route element={<ProtectedRoute allowedRoles={['admin']} />}><Route path="/admin" element={<Admin />} /></Route>
     <Route path="*" element={<NotFound />} />

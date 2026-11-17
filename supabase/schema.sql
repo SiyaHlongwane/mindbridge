@@ -176,6 +176,24 @@ do $$ declare referral_id uuid; begin
   end loop;
 end $$;
 
+create or replace function public.assign_unassigned_referrals_on_professional_promotion() returns trigger
+language plpgsql security definer set search_path = public
+as $$ declare referral_id uuid; begin
+  if new.role = 'professional' and old.role is distinct from new.role then
+    for referral_id in select id from public.referrals where professional_id is null
+      and status not in ('declined','follow_up_completed','cancelled','unable_to_contact')
+      order by created_at, id loop
+      update public.referrals set professional_id = public.next_referral_professional()
+        where id = referral_id and professional_id is null;
+    end loop;
+  end if;
+  return new;
+end $$;
+drop trigger if exists assign_unassigned_referrals_on_professional_promotion on public.profiles;
+create trigger assign_unassigned_referrals_on_professional_promotion
+  after update of role on public.profiles for each row
+  execute function public.assign_unassigned_referrals_on_professional_promotion();
+
 create or replace function public.touch_consent() returns trigger
 language plpgsql set search_path = public
 as $$ begin new.updated_at := now(); return new; end $$;
@@ -264,6 +282,6 @@ revoke all on public.audit_logs from anon, authenticated;
 grant select on public.audit_logs to authenticated;
 revoke all on function public.app_role() from public;
 grant execute on function public.app_role() to authenticated;
-revoke all on function public.create_profile(), public.guard_profile_role(), public.guard_referral_update(), public.touch_consent(), public.write_audit_log() from public;
+revoke all on function public.create_profile(), public.guard_profile_role(), public.guard_referral_update(), public.assign_unassigned_referrals_on_professional_promotion(), public.touch_consent(), public.write_audit_log() from public;
 
 commit;

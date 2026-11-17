@@ -28,7 +28,7 @@ function RequestForm({ service, onCreated }) {
 }
 
 export default function Referrals() {
-  const { user } = useAuth()
+  const { user, role } = useAuth()
   const [params] = useSearchParams()
   const serviceId = params.get('service')
   const [state, setState] = useState(null)
@@ -63,6 +63,7 @@ export default function Referrals() {
   if (state?.userId !== user.id) return <p role="status">Loading your referrals…</p>
   const selected = state.services.find(service => service.id === serviceId)
   return <section className="dashboard-page"><p className="eyebrow">SUPPORT THAT FOLLOWS THROUGH</p><h1>Your referrals</h1><p>Keep track of requests, sharing choices and follow-up. MindBridge is not an emergency service; referrals are not monitored in real time.</p>
+    {role === 'professional' && <p className="notice">This page shows referrals you requested. To review and accept referrals assigned to you, open <Link to="/professional">Professional</Link>.</p>}
     {state.servicesError && <p className="error" role="alert">{state.servicesError} Service names for new requests and alternatives may be unavailable.</p>}
     {serviceId && (selected ? <RequestForm key={`${user.id}-${serviceId}`} service={selected} onCreated={() => setAttempt(previous => previous + 1)} /> : !state.servicesError && <p className="notice">This service is not available for new requests. <Link to="/support">Explore active support options</Link>.</p>)}
     {!serviceId && <Link className="button" to="/support">Find a service to request support</Link>}

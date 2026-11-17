@@ -9,7 +9,7 @@
 
 ## Database setup
 
-Run `supabase/schema.sql`, then `supabase/seed.sql`, in the Supabase SQL editor as `postgres`. Both can be re-run. Seed listings are synthetic and unverified, not real support recommendations.
+Run `supabase/schema.sql`, then `supabase/seed.sql`, in the Supabase SQL editor as `postgres`. Both can be re-run. Re-run the updated schema after pulling schema changes: it assigns active referrals left unassigned when no professional account existed, and future professional role promotions assign outstanding referrals automatically. Seed listings are synthetic and unverified, not real support recommendations.
 
 For a demo only, optionally turn off email confirmation in Supabase Authentication settings. Register synthetic demo accounts through the app, then run the commented role-promotion statements at the bottom of `seed.sql`, replacing the example emails. New accounts always start as individuals regardless of signup metadata. Guards allow trusted database operations without an end-user session; anonymous clients have no table privileges. Signed-in clients need an existing admin role to promote accounts.
 
