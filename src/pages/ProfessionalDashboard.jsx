@@ -24,9 +24,19 @@ function ReferralCard({ referral, professionalId, refresh }) {
     } catch (error) { setError(error.message || 'Unable to save. Please try again.') }
     finally { setBusy(false) }
   }
+  async function accept() {
+    setBusy(true); setError(''); setMessage('')
+    try {
+      await updateReferralStatus(referral.id, 'accepted')
+      setMessage('Referral accepted.')
+      refresh()
+    } catch (error) { setError(error.message || 'Unable to accept this referral. Please try again.') }
+    finally { setBusy(false) }
+  }
   return <article className="card"><h2>{referral.service?.name || 'Service details unavailable'}</h2><p>{TIERS.find(tier => tier.id === referral.service?.tier)?.label || 'Tier unavailable'}</p><span className={`badge ${STATUS[referral.status]?.terminal ? 'status-ended' : ''}`}>{STATUS[referral.status]?.label || referral.status}</span>
     <p><strong>{referral.share_contact ? referral.profile?.full_name || 'Name not available' : 'Contact not shared'}</strong></p>
     <p className="muted">Created: {new Date(referral.created_at).toLocaleString()}<br />Last updated: {new Date(referral.updated_at).toLocaleString()}</p>
+    {referral.status === 'pending' && statuses.length > 0 && <Button disabled={busy} onClick={accept}>{busy ? 'Accepting…' : 'Accept referral'}</Button>}
     <h3>User note</h3><p className="referral-note">{referral.user_note || 'No note provided.'}</p>
     <h3>Assessment results</h3>{!referral.share_results ? <p>Results not shared</p> : <><p className="muted">Screening, not diagnosis. Latest available result for each instrument.</p>{referral.assessments.length === 0 ? <p>No assessment results available.</p> : <ul>{referral.assessments.map(row => <li key={row.instrument}>{row.instrument === 'PHQ9' ? 'PHQ-9' : 'GAD-7'}: {row.total_score} · {row.severity} · {new Date(row.created_at).toLocaleString()}</li>)}</ul>}</>}
     <h3>Update status</h3>{statuses.length === 0 ? <p>Manage your own referral from the Referrals page.</p> : <form className="consent-form" onSubmit={event => submit(event, false)}><label>Status<select name="status" defaultValue={referral.status === 'cancelled' ? '' : referral.status} disabled={busy} required><option value="" disabled>Choose status</option>{statuses.map(status => <option key={status} value={status}>{STATUS[status].label}</option>)}</select></label><Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save status'}</Button></form>}
