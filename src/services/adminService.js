@@ -41,6 +41,17 @@ export async function listAdminReferrals() {
   return data
 }
 
+export async function acceptAdminReferral(id) {
+  const { data, error } = await client().from('referrals')
+    .update({ status: 'accepted' })
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('This referral is no longer pending.')
+}
+
 export async function saveService(id, values) {
   const fields = { name: values.name.trim(), tier: values.tier, description: values.description.trim() || null, contact: values.contact.trim() || null, website: values.website.trim() || null }
   if (!fields.name) throw new Error('Enter a service name.')

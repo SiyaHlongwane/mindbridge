@@ -139,17 +139,19 @@ end $$;
 drop trigger if exists guard_referral_update on public.referrals;
 create trigger guard_referral_update before update on public.referrals for each row execute function public.guard_referral_update();
 
-create or replace function public.next_referral_professional() returns uuid
+drop function if exists public.next_referral_professional();
+create or replace function public.next_referral_professional(excluded_user_id uuid) returns uuid
 language plpgsql security definer set search_path = public
 as $$ declare chosen uuid; begin
   perform pg_advisory_xact_lock(7182407);
-  select p.id into chosen from public.profiles p where p.role = 'professional'
+  select p.id into chosen from public.profiles p
+  where p.role = 'professional' and p.id is distinct from excluded_user_id
   order by (select count(*) from public.referrals r where r.professional_id = p.id
     and r.status not in ('declined','follow_up_completed','cancelled','unable_to_contact')), p.id
   limit 1;
   return chosen;
 end $$;
-revoke all on function public.next_referral_professional() from public, anon, authenticated;
+revoke all on function public.next_referral_professional(uuid) from public, anon, authenticated;
 
 create or replace function public.assign_referral_professional() returns trigger
 language plpgsql security definer set search_path = public
@@ -159,7 +161,7 @@ as $$ begin
     raise exception 'Clients cannot choose a professional' using errcode = '42501';
   end if;
   if new.professional_id is null then
-    new.professional_id := public.next_referral_professional();
+    new.professional_id := public.next_referral_professional(new.user_id);
   end if;
   return new;
 end $$;
@@ -167,24 +169,28 @@ drop trigger if exists assign_referral_professional on public.referrals;
 create trigger assign_referral_professional before insert on public.referrals
   for each row execute function public.assign_referral_professional();
 
-do $$ declare referral_id uuid; begin
-  for referral_id in select id from public.referrals where professional_id is null
+update public.referrals set professional_id = null
+where professional_id = user_id
+  and status not in ('declined','follow_up_completed','cancelled','unable_to_contact');
+
+do $$ declare referral record; begin
+  for referral in select id, user_id from public.referrals where professional_id is null
     and status not in ('declined','follow_up_completed','cancelled','unable_to_contact')
     order by created_at, id loop
-    update public.referrals set professional_id = public.next_referral_professional()
-      where id = referral_id;
+    update public.referrals set professional_id = public.next_referral_professional(referral.user_id)
+      where id = referral.id;
   end loop;
 end $$;
 
 create or replace function public.assign_unassigned_referrals_on_professional_promotion() returns trigger
 language plpgsql security definer set search_path = public
-as $$ declare referral_id uuid; begin
+as $$ declare referral record; begin
   if new.role = 'professional' and old.role is distinct from new.role then
-    for referral_id in select id from public.referrals where professional_id is null
+    for referral in select id, user_id from public.referrals where professional_id is null
       and status not in ('declined','follow_up_completed','cancelled','unable_to_contact')
       order by created_at, id loop
-      update public.referrals set professional_id = public.next_referral_professional()
-        where id = referral_id and professional_id is null;
+      update public.referrals set professional_id = public.next_referral_professional(referral.user_id)
+        where id = referral.id and professional_id is null;
     end loop;
   end if;
   return new;

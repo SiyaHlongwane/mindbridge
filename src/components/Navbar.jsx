@@ -23,7 +23,7 @@ export default function Navbar() {
     <Button className="menu-toggle button-secondary" aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open} aria-controls="main-nav" onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</Button>
     <nav id="main-nav" className={open ? 'nav-links is-open' : 'nav-links'} aria-label="Main navigation" onClick={event => { if (event.target.closest('a')) setOpen(false) }}>
       {session && role === 'individual' && <><NavLink to="/dashboard">Dashboard</NavLink><NavLink to="/assessment">Assessment</NavLink><NavLink to="/support">Support</NavLink><NavLink to="/referrals">Referrals</NavLink></>}
-      {session && role === 'professional' && <><NavLink to="/professional">Professional</NavLink><NavLink to="/my-referrals">My referrals</NavLink></>}
+      {session && role === 'professional' && <><NavLink to="/professional">Assigned referrals</NavLink><NavLink to="/my-referrals">My requests</NavLink></>}
       {session && role === 'admin' && <NavLink to="/admin">Admin</NavLink>}
       <NavLink to="/privacy">Privacy</NavLink>
       {session ? <Button className="button-secondary" onClick={logout}>Log out</Button> : <><NavLink to="/login">Log in</NavLink><Link className="button" to="/register">Get started</Link></>}

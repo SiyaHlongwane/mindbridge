@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/auth'
 import { listAssignedReferrals, updateReferralStatus, addFollowUp, filterReferrals, allowedStatuses } from '../services/professionalService'
 import { STATUS } from '../services/referralService'
@@ -58,8 +59,8 @@ export default function ProfessionalDashboard() {
   }, [user.id, attempt])
   function refresh() { setAttempt(value => value + 1) }
   const rows = state?.rows ? filterReferrals(state.rows, filter) : []
-  return <section className="dashboard-page"><p className="eyebrow">HUMAN SUPPORT, CONNECTED</p><h1>Professional workspace</h1><p>Review assigned referrals and record next steps. MindBridge is not a diagnostic or emergency service.</p><div className="tier-filters" role="group" aria-label="Filter assigned referrals">{[['active', 'Active'], ['completed', 'Completed / closed'], ['all', 'All']].map(([value, label]) => <button type="button" key={value} className={`button ${filter === value ? '' : 'button-secondary'}`} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div>
-    {state?.userId !== user.id ? <p role="status">Loading assigned referrals…</p> : state.error ? <p className="error" role="alert">{state.error}</p> : rows.length === 0 ? <p className="card">No {filter === 'all' ? '' : filter === 'active' ? 'active ' : 'completed or closed '}assigned referrals to show.</p> : <div className="referral-list">{rows.map(referral => <ReferralCard key={`${referral.id}-${referral.updated_at}`} referral={referral} professionalId={user.id} refresh={refresh} />)}</div>}
+  return <section className="dashboard-page"><p className="eyebrow">HUMAN SUPPORT, CONNECTED</p><h1>Assigned referrals</h1><p>Review referrals assigned to you and record next steps. MindBridge is not a diagnostic or emergency service.</p><div className="tier-filters" role="group" aria-label="Filter assigned referrals">{[['active', 'Active'], ['completed', 'Completed / closed'], ['all', 'All']].map(([value, label]) => <button type="button" key={value} className={`button ${filter === value ? '' : 'button-secondary'}`} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div>
+    {state?.userId !== user.id ? <p role="status">Loading assigned referrals…</p> : state.error ? <p className="error" role="alert">{state.error}</p> : rows.length === 0 ? <article className="card"><p>No {filter === 'all' ? '' : filter === 'active' ? 'active ' : 'completed or closed '}referrals are assigned to this professional account.</p><p>Your own requests appear under <Link to="/my-referrals">My requests</Link> and cannot be accepted by the same account. To test acceptance, submit a referral from a separate individual account.</p></article> : <div className="referral-list">{rows.map(referral => <ReferralCard key={`${referral.id}-${referral.updated_at}`} referral={referral} professionalId={user.id} refresh={refresh} />)}</div>}
     <div className="actions"><Button className="button-secondary" onClick={refresh}>Refresh referrals</Button></div>
   </section>
 }
