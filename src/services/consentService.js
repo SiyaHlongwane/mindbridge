@@ -23,6 +23,8 @@ export async function setConsent(userId, type, granted) {
 
 export async function withdrawSharing(userId, type) {
   if (!['share_results', 'share_contact'].includes(type)) throw new Error('Choose an optional sharing preference.')
+  // Updates all non-terminal (cancellable) referrals. 'follow_up_completed' is
+  // terminal and intentionally excluded — sharing for completed referrals is not retracted.
   const { error } = await client().from('referrals').update({ [type]: false }).eq('user_id', userId).in('status', ['pending', 'accepted', 'appointment_scheduled'])
   if (error) throw error
   await setConsent(userId, type, false)
