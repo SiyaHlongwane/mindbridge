@@ -6,12 +6,25 @@ function client() {
   return supabase
 }
 
+// Forward-only transitions a professional may apply.
+// 'cancelled' is always excluded (user action only).
+const PROFESSIONAL_TRANSITIONS = {
+  pending:               ['accepted', 'declined', 'unable_to_contact'],
+  accepted:              ['appointment_scheduled', 'declined', 'unable_to_contact'],
+  appointment_scheduled: ['follow_up_completed', 'unable_to_contact'],
+  follow_up_completed:   [],
+  declined:              [],
+  cancelled:             [],
+  unable_to_contact:     [],
+}
+
 export function filterReferrals(referrals, filter) {
   return referrals.filter(referral => filter === 'all' || (filter === 'active' ? isActiveReferral(referral) : STATUS[referral.status]?.terminal === true))
 }
 
 export function allowedStatuses(referral, professionalId) {
-  return referral.user_id === professionalId ? [] : Object.keys(STATUS).filter(status => status !== 'cancelled')
+  if (referral.user_id === professionalId) return []
+  return PROFESSIONAL_TRANSITIONS[referral.status] ?? []
 }
 
 export async function listAssignedReferrals(professionalId) {
@@ -42,8 +55,10 @@ export async function updateReferralStatus(id, status) {
 }
 
 export async function addFollowUp(referralId, note, outcome) {
-  if (!note.trim() && !outcome.trim()) throw new Error('Enter a note or outcome.')
-  const { data, error } = await client().from('follow_ups').insert({ referral_id: referralId, note: note.trim() || null, outcome: outcome.trim() || null }).select().single()
+  const cleanNote    = (note    ?? '').trim()
+  const cleanOutcome = (outcome ?? '').trim()
+  if (!cleanNote && !cleanOutcome) throw new Error('Enter a note or outcome.')
+  const { data, error } = await client().from('follow_ups').insert({ referral_id: referralId, note: cleanNote || null, outcome: cleanOutcome || null }).select().single()
   if (error) throw error
   return data
 }

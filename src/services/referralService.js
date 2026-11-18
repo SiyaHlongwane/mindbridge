@@ -4,12 +4,13 @@ export const STATUS = {
   pending: { label: 'Pending', description: 'Your request is waiting for a response.', terminal: false },
   accepted: { label: 'Accepted', description: 'Your referral has been accepted.', terminal: false },
   appointment_scheduled: { label: 'Appointment scheduled', description: 'An appointment has been arranged.', terminal: false },
-  follow_up_completed: { label: 'Follow-up completed', description: 'Follow-up has been completed for this referral.', terminal: true },
+  follow_up_completed: { label: 'Follow-up completed', description: 'Follow-up has been completed for this referral.', terminal: true /* terminal: sharing withdrawal and cancel no longer apply */ },
   declined: { label: 'Declined', description: 'This service could not accept your referral. Other options are available.', terminal: true },
   cancelled: { label: 'Cancelled', description: 'This referral has been cancelled.', terminal: true },
   unable_to_contact: { label: 'Unable to contact', description: 'Contact could not be established. You can explore other options.', terminal: true },
 }
 export const HAPPY_PATH = ['pending', 'accepted', 'appointment_scheduled', 'follow_up_completed']
+export const CANCELLABLE_STATUSES = ['pending', 'accepted', 'appointment_scheduled']
 export const pendingReminder = 'No response yet. You can wait, contact the service directly, or explore alternatives.'
 
 export function isActiveReferral(referral) {
@@ -48,7 +49,13 @@ export async function getReferral(id) {
 }
 
 export async function cancelReferral(id) {
-  const { data, error } = await client().from('referrals').update({ status: 'cancelled' }).eq('id', id).select(referralFields).single()
+  const { data, error } = await client().from('referrals')
+    .update({ status: 'cancelled' })
+    .eq('id', id)
+    .in('status', CANCELLABLE_STATUSES)
+    .select(referralFields)
+    .maybeSingle()
   if (error) throw error
+  if (!data) throw new Error('This referral cannot be cancelled. It may have already ended or been updated.')
   return data
 }

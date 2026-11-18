@@ -23,7 +23,15 @@ export function AuthProvider({ children }) {
   }, [userId])
 
   async function refreshConsents() {
-    if (userId) setConsentState(await loadConsents(userId))
+    if (!userId) return
+    try {
+      setConsentState(await loadConsents(userId))
+    } catch (error) {
+      setConsentState(previous => ({
+        ...previous,
+        error: error.message || 'Unable to refresh your consent preferences.',
+      }))
+    }
   }
 
   useEffect(() => {
