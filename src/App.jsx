@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { useAuth } from './context/auth'
 import Navbar from './components/Navbar'
@@ -20,7 +20,14 @@ import Privacy from './pages/Privacy'
 
 function ReferralHome() {
   const { role } = useAuth()
-  return role === 'professional' ? <Navigate to="/professional" replace /> : <Referrals />
+  const [params] = useSearchParams()
+  const qs = params.toString()
+  if (role === 'professional') {
+    // Preserve ?service=... so the referral form pre-selects the right service.
+    // Without a service param, send professionals to their primary workspace.
+    return <Navigate to={qs ? `/my-referrals?${qs}` : '/professional'} replace />
+  }
+  return <Referrals />
 }
 
 export default function App() {
@@ -33,7 +40,7 @@ export default function App() {
     <Route element={<ProtectedRoute />}>
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/assessment" element={<Assessment />} />
-      <Route path="/results" element={<Dashboard />} />
+      <Route path="/results" element={<Navigate to="/dashboard" replace />} />
       <Route path="/results/:id" element={<Results />} />
       <Route path="/support" element={<Support />} />
     </Route>
