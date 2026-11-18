@@ -14,7 +14,7 @@ export async function saveAssessment(userId, instrumentId, answers) {
 }
 
 export async function listAssessments(userId) {
-  const { data, error } = await client().from('assessments').select('id, instrument, total_score, severity, created_at').eq('user_id', userId).order('created_at', { ascending: false })
+  const { data, error } = await client().from('assessments').select('id, instrument, total_score, severity, answers, created_at').eq('user_id', userId).order('created_at', { ascending: false })
   if (error) throw error
   return data
 }
