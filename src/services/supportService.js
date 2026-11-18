@@ -9,9 +9,15 @@ export const TIERS = [
   { id: 'specialist', label: 'Specialist services', description: 'More focused support for complex or ongoing needs.' },
 ]
 
-export async function listServices() {
+function client() {
   if (!supabase) throw new Error('Supabase not configured.')
-  const { data, error } = await supabase.from('support_services').select('*').eq('active', true).order('tier').order('name')
+  return supabase
+}
+
+export async function listServices() {
+  // Sorted in JS by TIERS order then name. SQL ordering by raw tier string is
+  // alphabetical and does not match TIERS order, so it is intentionally omitted.
+  const { data, error } = await client().from('support_services').select('*').eq('active', true)
   if (error) throw error
   return [...data].sort((a, b) => TIERS.findIndex(tier => tier.id === a.tier) - TIERS.findIndex(tier => tier.id === b.tier) || a.name.localeCompare(b.name))
 }
@@ -24,6 +30,6 @@ export function recommendTiers(latestAssessments = []) {
   const worst = Math.max(0, ...latest.map(row => ranks[row.severity] ?? 0))
   return {
     tiers: worst >= 3 ? ['mental_health_professional', 'specialist', 'primary_care'] : worst === 2 ? ['primary_care', 'community'] : ['self_help', 'community'],
-    urgent: latest.some(row => hasSelfHarmResponse(row.instrument, row.answers)),
+    urgent: latest.some(row => Array.isArray(row.answers) && hasSelfHarmResponse(row.instrument, row.answers)),
   }
 }
