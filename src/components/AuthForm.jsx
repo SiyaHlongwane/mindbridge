@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/auth'
 import { useI18n } from '../context/i18n'
@@ -51,6 +51,28 @@ export default function AuthForm({ register = false }) {
   const [canResendConfirmation, setCanResendConfirmation] = useState(false)
   const [emailInput, setEmailInput] = useState('')
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''))
+    let dirty = false
+    for (const key of ['error', 'error_description', 'error_code']) {
+      if (url.searchParams.has(key)) {
+        url.searchParams.delete(key)
+        dirty = true
+      }
+      if (hashParams.has(key)) {
+        hashParams.delete(key)
+        dirty = true
+      }
+    }
+    if (dirty) {
+      const nextHash = hashParams.toString()
+      const cleanUrl = `${url.pathname}${url.search}${nextHash ? `#${nextHash}` : ''}`
+      window.history.replaceState(null, '', cleanUrl)
+    }
+  }, [])
 
   if (!loading && session && !passwordRecovery) {
     return <Navigate to={ROLE_DESTINATIONS[role] || '/dashboard'} replace />

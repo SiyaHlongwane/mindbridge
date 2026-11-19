@@ -134,7 +134,7 @@ function createInitialData() {
         created_at: daysAgo(18),
         equity: { age_group: '25-34', gender: 'Female', nationality_group: 'Expatriate resident', language: 'English', geography: 'Al Dhafra' },
         physical_context: {
-          conditions: ['Diabetes / blood-sugar management', 'Chronic pain'],
+          conditions: ['Diabetes / blood-sugar management', 'Chronic pain / fatigue'],
           primary_care_note: 'Coordinating work-stress anxiety with diabetes management.',
           medications_note: 'Metformin 500mg',
           malaffi_simulated: {

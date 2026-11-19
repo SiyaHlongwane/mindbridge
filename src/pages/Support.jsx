@@ -111,7 +111,7 @@ export default function Support() {
             )}
             {(state.servicesError || state.assessmentError) && (
               <div className="actions">
-                <Button variant="secondary" onClick={() => setAttempt(attempt + 1)}>
+                <Button className="button-secondary" onClick={() => setAttempt(attempt + 1)}>
                   {isAr ? 'إعادة المحاولة' : 'Retry loading'}
                 </Button>
               </div>

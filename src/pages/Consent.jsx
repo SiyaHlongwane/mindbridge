@@ -60,7 +60,7 @@ export default function Consent() {
         {consentsLoading ? (
           <p role="status">Loading your preferences…</p>
         ) : (
-          <form className="consent-form" onSubmit={submit}>
+          <form key={`${user.id}-${JSON.stringify(equity)}`} className="consent-form" onSubmit={submit}>
             {consentError && (
               <p className="error" role="alert">
                 {consentError} You can retry saving your choices below.

@@ -63,6 +63,7 @@ export default function Dashboard() {
         conditions: selectedConditions,
         primary_care_note: data.get('primary_care_note') || '',
         medications_note: data.get('medications_note') || '',
+        malaffi_simulated: profile?.physical_context?.malaffi_simulated || null,
       })
       await refreshProfile()
       setDraftConditions(null)
@@ -81,10 +82,12 @@ export default function Dashboard() {
     })
   }
 
+  const locale = isAr ? 'ar-AE' : 'en-GB'
   const name = profile?.full_name || user.user_metadata?.full_name
   const ready = state?.userId === user.id
   const rows = ready && !state.error ? state.rows : []
   const trend = [...rows].reverse().map(row => ({ time: Date.parse(row.created_at), [row.instrument]: row.total_score }))
+  const trendYMax = rows.reduce((max, row) => Math.max(max, instruments[row.instrument]?.max || 27), 27)
   const malaffiSim = profile?.physical_context?.malaffi_simulated
 
   return (
@@ -125,7 +128,7 @@ export default function Dashboard() {
               const matching = rows.filter(row => row.instrument === id)
               const latest = matching[0]
               const previous = matching[1]
-              const change = compareAssessments(latest, previous)
+              const change = compareAssessments(latest, previous, locale)
               return (
                 <article className="card" key={id}>
                   <h2>{isAr ? tool.nameAr : `Latest ${tool.name}`}</h2>
@@ -169,9 +172,9 @@ export default function Dashboard() {
                         type="number"
                         scale="time"
                         domain={trend.length === 1 ? [trend[0].time - 86400000, trend[0].time + 86400000] : ['dataMin', 'dataMax']}
-                        tickFormatter={value => new Date(value).toLocaleDateString()}
+                        tickFormatter={value => new Date(value).toLocaleDateString(locale)}
                       />
-                      <YAxis domain={[0, 100]} allowDecimals={false} />
+                      <YAxis domain={[0, trendYMax]} allowDecimals={false} />
                       <Tooltip labelFormatter={value => formatDate(value)} />
                       <Legend />
                       <Line name="PHQ-9 (mood)" dataKey="PHQ9" stroke="#0F8B8D" strokeWidth={2} dot={{ r: 5 }} connectNulls isAnimationActive={false} />
@@ -198,7 +201,7 @@ export default function Dashboard() {
                 </p>
               </div>
             )}
-            <form className="consent-form" onSubmit={savePhysical}>
+            <form key={profile?.physical_context?.updated_at || 'empty'} className="consent-form" onSubmit={savePhysical}>
               <div className="chip-grid" role="group" aria-label="Relevant physical health context">
                 {COMMON_CONDITIONS.map(cond => (
                   <label key={cond} className="check-chip">

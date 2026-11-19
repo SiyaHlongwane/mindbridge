@@ -323,7 +323,8 @@ alter table public.audit_logs enable row level security;
 drop policy if exists profiles_read on public.profiles;
 create policy profiles_read on public.profiles for select to authenticated using (
   id = auth.uid() or public.app_role() = 'admin' or
-  (public.app_role() in ('professional','coordinator') and exists (select 1 from public.referrals r where r.user_id = profiles.id and (r.professional_id = auth.uid() or public.app_role() = 'coordinator') and r.share_contact)) or
+  (public.app_role() = 'professional' and exists (select 1 from public.referrals r where r.user_id = profiles.id and r.professional_id = auth.uid() and (r.share_contact or r.share_physical_context))) or
+  (public.app_role() = 'coordinator' and exists (select 1 from public.referrals r where r.user_id = profiles.id and r.share_contact)) or
   (public.app_role() = 'primary_care' and exists (select 1 from public.referrals r where r.user_id = profiles.id and r.share_physical_context))
 );
 drop policy if exists profiles_insert on public.profiles;
@@ -396,7 +397,7 @@ create policy follow_ups_insert on public.follow_ups for insert to authenticated
 
 drop policy if exists adverse_read on public.adverse_events;
 create policy adverse_read on public.adverse_events for select to authenticated using (
-  public.app_role() in ('admin','analyst','coordinator','professional')
+  public.app_role() in ('admin','analyst','coordinator','professional','primary_care')
 );
 drop policy if exists adverse_insert on public.adverse_events;
 create policy adverse_insert on public.adverse_events for insert to authenticated with check (
@@ -528,8 +529,8 @@ begin
     (select count(*) from series_pairs where case when instrument = 'WHO5' then last_score > first_score else last_score < first_score end),
     (select count(*) from filt_followups where outcome_status = 'improved'),
     (select count(*) from filt_followups where outcome_status is not null),
-    (select count(*) from filt_referrals where crisis_flagged or priority = 'urgent' or status = 'escalated'),
-    (select count(*) from filt_referrals where (crisis_flagged or priority = 'urgent' or status = 'escalated') and crisis_completed_at is not null)
+    (select count(*) from non_canc where crisis_flagged or priority = 'urgent' or status = 'escalated'),
+    (select count(*) from non_canc where (crisis_flagged or priority = 'urgent' or status = 'escalated') and crisis_completed_at is not null)
   into
     opted_in_count, total_assessments, positive_screens, converted_count,
     non_cancelled, completed_refs, scheduled_or_attended, attended_count,
@@ -594,20 +595,30 @@ begin
     select d.dim, coalesce(nullif(oi.equity->>d.dim, ''), 'Not specified') as grp,
       oi.id as user_id,
       exists (select 1 from pos_u p where p.user_id = oi.id) as is_pos,
-      exists (select 1 from conv_u c where c.user_id = oi.id) as is_conv,
-      (select avg(greatest(0, extract(epoch from (r.first_response_at - r.created_at)) / 3600.0))
-       from public.referrals r where r.user_id = oi.id and r.created_at >= cutoff and r.status <> 'cancelled' and r.first_response_at is not null) as avg_user_wait
+      exists (select 1 from conv_u c where c.user_id = oi.id) as is_conv
     from opted_individuals oi
     cross join (values ('age_group'), ('gender'), ('nationality_group'), ('language'), ('geography')) as d(dim)
   ),
+  group_waits as (
+    select d.dim, d.grp,
+      round(avg(greatest(0, extract(epoch from (r.first_response_at - r.created_at)) / 3600.0))::numeric, 1) as avg_wait
+    from dims d
+    join public.referrals r
+      on r.user_id = d.user_id
+     and r.created_at >= cutoff
+     and r.status <> 'cancelled'
+     and r.first_response_at is not null
+    group by d.dim, d.grp
+  ),
   grouped as (
-    select dim, grp,
+    select d.dim, d.grp,
       count(*) as individuals,
-      count(*) filter (where is_pos) as pos_screens,
-      count(*) filter (where is_conv) as handoffs,
-      round(avg(avg_user_wait)::numeric, 1) as avg_wait
-    from dims
-    group by dim, grp
+      count(*) filter (where d.is_pos) as pos_screens,
+      count(*) filter (where d.is_conv) as handoffs,
+      gw.avg_wait
+    from dims d
+    left join group_waits gw on gw.dim = d.dim and gw.grp = d.grp
+    group by d.dim, d.grp, gw.avg_wait
   ),
   formatted as (
     select dim,

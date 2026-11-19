@@ -88,7 +88,7 @@ export default function Results() {
   const { row, score, previous } = state
   const instrument = instruments[row.instrument]
   const meaning = severityMeanings[score.severity]
-  const change = compareAssessments(row, previous)
+  const change = compareAssessments(row, previous, isAr ? 'ar-AE' : 'en-GB')
   const calculationText = explainCalculation(row.instrument, row.answers)
   const lowerBand = ['minimal', 'mild'].includes(score.severity)
   const urgent = hasSelfHarmResponse(row.instrument, row.answers)

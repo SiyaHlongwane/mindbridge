@@ -21,6 +21,14 @@ import { STATUS } from '../services/referralService'
 import { TIERS } from '../services/supportService'
 import Button from '../components/Button'
 
+function toLocalDateTimeInput(iso) {
+  if (!iso) return ''
+  const dt = new Date(iso)
+  if (Number.isNaN(dt.getTime())) return ''
+  const pad = n => String(n).padStart(2, '0')
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+}
+
 function ReferralCard({ referral, actorId, mode, refresh }) {
   const { formatDate } = useI18n()
   const [busy, setBusy] = useState(false)
@@ -276,7 +284,7 @@ function ReferralCard({ referral, actorId, mode, refresh }) {
               <input
                 type="datetime-local"
                 name="appointment_at"
-                defaultValue={referral.appointment_at ? referral.appointment_at.slice(0, 16) : ''}
+                defaultValue={toLocalDateTimeInput(referral.appointment_at)}
                 disabled={busy}
               />
             </label>
@@ -310,12 +318,16 @@ function ReferralCard({ referral, actorId, mode, refresh }) {
 
       <h3>Update referral status</h3>
       {statuses.length === 0 ? (
-        <p>Manage your own referral from the My requests page.</p>
+        <p className="muted">
+          {referral.user_id === actorId
+            ? 'Manage your own referral from the My requests page.'
+            : 'This referral is closed and its status can no longer be changed.'}
+        </p>
       ) : (
         <form className="consent-form" onSubmit={event => submitStatusOrFollowUp(event, false)}>
           <label>
             Status
-            <select name="status" defaultValue={referral.status === 'cancelled' ? '' : referral.status} disabled={busy} required>
+            <select name="status" defaultValue={statuses.includes(referral.status) ? referral.status : ''} disabled={busy} required>
               <option value="" disabled>Choose status</option>
               {statuses.map(status => (
                 <option key={status} value={status}>

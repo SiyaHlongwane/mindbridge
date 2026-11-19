@@ -297,7 +297,7 @@ export function hasSelfHarmResponse(instrumentId, answers) {
   return instrumentId === 'PHQ9' && Array.isArray(answers) && answers[8] > 0
 }
 
-export function compareAssessments(current, previous) {
+export function compareAssessments(current, previous, locale = 'en-GB') {
   if (!current || !previous) return null
   const instrument = instruments[current.instrument]
   const isPositiveScale = Boolean(instrument?.positiveScale)
@@ -308,9 +308,10 @@ export function compareAssessments(current, previous) {
   const absDelta = Math.abs(delta)
   const significant = isPositiveScale ? absDelta >= 10 : absDelta >= 5
   const sign = delta > 0 ? `+${delta}` : `${delta}`
-  let summary = `Unchanged (${current.total_score}) compared to your check-in on ${new Date(previous.created_at).toLocaleDateString()}.`
+  const prevDate = new Date(previous.created_at).toLocaleDateString(locale)
+  let summary = `Unchanged (${current.total_score}) compared to your check-in on ${prevDate}.`
   if (delta !== 0) {
-    summary = `${improved ? 'Improved' : 'Shifted'} (${sign} points) since ${new Date(previous.created_at).toLocaleDateString()} (${previous.severity} → ${current.severity})${significant ? ' — notable change over time' : ''}.`
+    summary = `${improved ? 'Improved' : 'Shifted'} (${sign} points) since ${prevDate} (${previous.severity} → ${current.severity})${significant ? ' — notable change over time' : ''}.`
   }
   return { delta, direction, significant, summary }
 }

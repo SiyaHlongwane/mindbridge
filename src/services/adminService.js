@@ -99,10 +99,22 @@ export async function listAdminReferrals() {
   }
   const { data, error } = await supabase
     .from('referrals')
-    .select('id, user_id, status, priority, crisis_flagged, created_at, service:support_services(name), user:profiles!referrals_user_id_fkey(full_name)')
+    .select('id, user_id, status, priority, crisis_flagged, created_at, service:support_services(name), user:profiles!referrals_user_id_fkey(equity)')
     .order('created_at', { ascending: false })
   if (error) throw error
-  return data
+  return (data || []).map(r => {
+    const geography = r.user?.equity?.geography || 'Unspecified'
+    return {
+      id: r.id,
+      user_id: r.user_id,
+      status: r.status,
+      priority: r.priority || 'routine',
+      crisis_flagged: Boolean(r.crisis_flagged),
+      created_at: r.created_at,
+      service: r.service || null,
+      reference_label: `Ref #${r.id.slice(-6)} · ${geography}`,
+    }
+  })
 }
 
 export async function acceptAdminReferral(id) {
@@ -118,9 +130,17 @@ export async function acceptAdminReferral(id) {
     saveDemoDb(db)
     return
   }
+  const { data: current, error: fetchErr } = await supabase
+    .from('referrals')
+    .select('first_response_at')
+    .eq('id', id)
+    .maybeSingle()
+  if (fetchErr) throw fetchErr
+  const updates = { status: 'professional_review' }
+  if (!current?.first_response_at) updates.first_response_at = now
   const { data, error } = await supabase
     .from('referrals')
-    .update({ status: 'professional_review', first_response_at: now })
+    .update(updates)
     .eq('id', id)
     .in('status', ['support_requested', 'pending', 'submitted', 'received'])
     .select('id')
@@ -330,7 +350,7 @@ function computeOutcomeDataset({ users, consents = [], assessments, referrals, f
     ? Math.round(((improvedPairs + improvedFollowUps) / totalOutcomeEvaluated) * 100)
     : 0
 
-  const crisisReferrals = filteredReferrals.filter(r => r.crisis_flagged || r.priority === 'urgent' || r.status === 'escalated')
+  const crisisReferrals = nonCancelledReferrals.filter(r => r.crisis_flagged || r.priority === 'urgent' || r.status === 'escalated')
   const crisisCompleted = crisisReferrals.filter(r => Boolean(r.crisis_completed_at)).length
   const crisisCompletionRate = crisisReferrals.length > 0 ? Math.round((crisisCompleted / crisisReferrals.length) * 100) : 100
 

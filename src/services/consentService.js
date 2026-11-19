@@ -91,15 +91,26 @@ export async function updatePhysicalContext(userId, physicalContext) {
     if (!user) throw new Error('User profile not found.')
     user.physical_context = {
       ...normalized,
-      malaffi_simulated: user.physical_context?.malaffi_simulated || normalized.malaffi_simulated,
+      malaffi_simulated: normalized.malaffi_simulated || user.physical_context?.malaffi_simulated || null,
     }
     appendDemoAudit(db, userId, 'UPDATE_PHYSICAL_CONTEXT', 'profiles', userId)
     saveDemoDb(db)
     return user.physical_context
   }
-  const { error } = await supabase.from('profiles').update({ physical_context: normalized }).eq('id', userId)
+  let merged = normalized
+  if (!normalized.malaffi_simulated) {
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('physical_context')
+      .eq('id', userId)
+      .maybeSingle()
+    if (existing?.physical_context?.malaffi_simulated) {
+      merged = { ...normalized, malaffi_simulated: existing.physical_context.malaffi_simulated }
+    }
+  }
+  const { error } = await supabase.from('profiles').update({ physical_context: merged }).eq('id', userId)
   if (error) throw error
-  return normalized
+  return merged
 }
 
 export async function updateEquityProfile(userId, equity) {
@@ -124,6 +135,14 @@ export async function updateEquityProfile(userId, equity) {
 }
 
 export async function eraseMyWellbeingData(userId) {
+  try {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(`mindbridge_assessment_draft_${userId}`)
+    }
+  } catch {
+    // ignore storage errors
+  }
+
   if (isDemo()) {
     const db = loadDemoDb()
     db.assessments = db.assessments.filter(item => item.user_id !== userId)

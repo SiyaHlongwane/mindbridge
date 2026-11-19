@@ -173,7 +173,7 @@ export default function Privacy() {
                 <div className="consent-item">
                   <h3>Optional de-identified fairness &amp; language preferences</h3>
                   <p className="muted">Used strictly in aggregate with small-cell suppression to monitor equity across Abu Dhabi.</p>
-                  <form className="consent-form" onSubmit={saveEquity}>
+                  <form key={JSON.stringify(equity)} className="consent-form" onSubmit={saveEquity}>
                     <div className="equity-form-grid">
                       <label>
                         Age group

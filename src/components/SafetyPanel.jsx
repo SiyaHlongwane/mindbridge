@@ -8,6 +8,8 @@ export default function SafetyPanel({ inlineWarning = false }) {
   const { lang } = useI18n()
   const isAr = lang === 'ar'
   const isSignedIn = Boolean(auth?.session)
+  const canRequestReferral = isSignedIn && ['individual', 'professional'].includes(auth?.role)
+  const urgentPath = auth?.role === 'professional' ? '/my-referrals?urgent=1' : '/referrals?urgent=1'
 
   return (
     <aside className="safety-panel" aria-labelledby="safety-title" role="region">
@@ -34,12 +36,12 @@ export default function SafetyPanel({ inlineWarning = false }) {
       <p className="notice">{isAr ? crisisDetails.fallbackAr : crisisDetails.fallbackEn}</p>
       <p className="muted">{isAr ? crisisDetails.disclaimerAr : crisisDetails.disclaimer}</p>
       <div className="actions">
-        {isSignedIn && (
-          <Link className="button" to="/referrals?urgent=1">
+        {canRequestReferral && (
+          <Link className="button" to={urgentPath}>
             {isAr ? 'طلب تصعيد عاجل لمختص (أولوية 24 ساعة)' : 'Request urgent human escalation (24h priority)'}
           </Link>
         )}
-        <Link className={isSignedIn ? 'button button-secondary' : 'button'} to="/support">
+        <Link className={canRequestReferral ? 'button button-secondary' : 'button'} to="/support">
           {isAr ? 'استكشاف الدعم البشري والعاجل' : 'Explore human & urgent support'}
         </Link>
       </div>

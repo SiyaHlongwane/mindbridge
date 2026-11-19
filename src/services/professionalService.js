@@ -72,9 +72,13 @@ async function hydrateSupabaseClinicianRows(rows) {
       let physical_context = null
       let assessments = []
       if (referral.share_contact || referral.share_physical_context) {
+        const cols = [
+          referral.share_contact ? 'full_name' : null,
+          referral.share_physical_context ? 'physical_context' : null,
+        ].filter(Boolean).join(', ')
         const result = await supabase
           .from('profiles')
-          .select('full_name, physical_context')
+          .select(cols)
           .eq('id', referral.user_id)
           .maybeSingle()
         if (!result.error && result.data) {
@@ -155,6 +159,7 @@ export async function updateReferralStatus(id, status, actorId = null) {
     const db = loadDemoDb()
     const referral = db.referrals.find(r => r.id === id)
     if (!referral) throw new Error('Referral not found.')
+    if (STATUS[referral.status]?.terminal) throw new Error('This referral is already closed and cannot be updated.')
     const now = new Date().toISOString()
     referral.status = status
     if (!referral.first_response_at && !['support_requested', 'submitted'].includes(status)) referral.first_response_at = now
@@ -164,8 +169,15 @@ export async function updateReferralStatus(id, status, actorId = null) {
     saveDemoDb(db)
     return referral
   }
+  const { data: current, error: fetchErr } = await supabase
+    .from('referrals')
+    .select('status, first_response_at')
+    .eq('id', id)
+    .single()
+  if (fetchErr) throw fetchErr
+  if (STATUS[current?.status]?.terminal) throw new Error('This referral is already closed and cannot be updated.')
   const updates = { status }
-  if (!['support_requested', 'submitted'].includes(status)) {
+  if (!current?.first_response_at && !['support_requested', 'submitted'].includes(status)) {
     updates.first_response_at = new Date().toISOString()
   }
   if (status === 'appointment_attended') updates.attendance_status = 'attended'
@@ -225,9 +237,17 @@ export async function acknowledgeCrisis(referralId, professionalId) {
     saveDemoDb(db)
     return referral
   }
+  const { data: current, error: fetchErr } = await supabase
+    .from('referrals')
+    .select('first_response_at')
+    .eq('id', referralId)
+    .single()
+  if (fetchErr) throw fetchErr
+  const updates = { crisis_acknowledged_at: now }
+  if (!current?.first_response_at) updates.first_response_at = now
   const { data, error } = await supabase
     .from('referrals')
-    .update({ crisis_acknowledged_at: now, first_response_at: now })
+    .update(updates)
     .eq('id', referralId)
     .select()
     .single()

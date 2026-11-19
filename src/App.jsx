@@ -1,4 +1,4 @@
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { HeartHandshake } from 'lucide-react'
 import { AuthProvider } from './context/AuthContext'
 import { I18nProvider } from './context/I18nContext'
@@ -24,7 +24,11 @@ import Privacy from './pages/Privacy'
 
 function ReferralHome() {
   const { role } = useAuth()
-  return role === 'professional' ? <Navigate to="/professional" replace /> : <Referrals />
+  const { search } = useLocation()
+  if (role === 'professional') {
+    return <Navigate to={search ? `/my-referrals${search}` : '/professional'} replace />
+  }
+  return <Referrals />
 }
 
 function AppShell() {
