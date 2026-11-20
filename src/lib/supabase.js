@@ -48,3 +48,18 @@ export const supabase =
         },
       })
     : null
+
+export function isMissingSchemaError(error) {
+  if (!error) return false
+  const code = String(error.code || '')
+  const msg = String(error.message || error.details || '')
+  return (
+    ['42703', '42P01', '42883', 'PGRST202', 'PGRST204', 'PGRST205'].includes(code) ||
+    /column .* does not exist|relation .* does not exist|could not find the .* column|could not find the function|schema cache/i.test(msg)
+  )
+}
+
+export function isCheckConstraintError(error) {
+  if (!error) return false
+  return String(error.code || '') === '23514' || /violates check constraint/i.test(String(error.message || ''))
+}

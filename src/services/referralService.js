@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { isCheckConstraintError, isMissingSchemaError, supabase } from '../lib/supabase'
 import { appendDemoAudit, demoGenerateId, loadDemoDb, saveDemoDb } from '../lib/demoStore'
 
 export const STATUS = {
@@ -55,6 +55,7 @@ export function needsReminder(referral, now = Date.now()) {
 }
 
 const referralFields = '*, service:support_services(name, tier, typical_wait, delivery_mode)'
+const baseReferralFields = '*, service:support_services(name, tier)'
 
 function hydrateDemoReferral(db, referral, includeFollowUps = false) {
   const service = db.support_services.find(item => item.id === referral.service_id) || null
@@ -125,7 +126,7 @@ export async function createReferral({ userId, serviceId, shareResults, shareCon
   const { data: svc } = await supabase.from('support_services').select('tier').eq('id', serviceId).maybeSingle()
   const isUrgent = Boolean(crisisFlagged || priority === 'urgent' || svc?.tier === 'urgent_emergency')
 
-  const { data, error } = await supabase
+  const fullInsert = await supabase
     .from('referrals')
     .insert({
       service_id: serviceId,
@@ -141,9 +142,26 @@ export async function createReferral({ userId, serviceId, shareResults, shareCon
     })
     .select(referralFields)
     .single()
-  if (error?.code === '23505') throw new Error('You already have an active referral to this service')
-  if (error) throw error
-  return data
+  if (!fullInsert.error) return fullInsert.data
+  if (fullInsert.error?.code === '23505') throw new Error('You already have an active referral to this service')
+
+  if (isMissingSchemaError(fullInsert.error) || isCheckConstraintError(fullInsert.error)) {
+    const basicInsert = await supabase
+      .from('referrals')
+      .insert({
+        service_id: serviceId,
+        status: 'pending',
+        share_results: Boolean(shareResults),
+        share_contact: Boolean(shareContact),
+        user_note: userNote?.trim() || null,
+      })
+      .select(baseReferralFields)
+      .single()
+    if (basicInsert.error?.code === '23505') throw new Error('You already have an active referral to this service')
+    if (basicInsert.error) throw basicInsert.error
+    return basicInsert.data
+  }
+  throw fullInsert.error
 }
 
 export async function listMyReferrals(userId) {
@@ -154,9 +172,13 @@ export async function listMyReferrals(userId) {
       .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
       .map(r => hydrateDemoReferral(db, r, false))
   }
-  const { data, error } = await supabase.from('referrals').select(referralFields).eq('user_id', userId).order('created_at', { ascending: false })
-  if (error) throw error
-  return data
+  const full = await supabase.from('referrals').select(referralFields).eq('user_id', userId).order('created_at', { ascending: false })
+  if (!full.error) return full.data
+  if (!isMissingSchemaError(full.error)) throw full.error
+
+  const basic = await supabase.from('referrals').select(baseReferralFields).eq('user_id', userId).order('created_at', { ascending: false })
+  if (basic.error) throw basic.error
+  return basic.data
 }
 
 export async function getReferral(id) {
@@ -165,10 +187,17 @@ export async function getReferral(id) {
     const referral = db.referrals.find(r => r.id === id)
     return referral ? hydrateDemoReferral(db, referral, true) : null
   }
-  const { data, error } = await supabase.from('referrals').select(`${referralFields}, follow_ups(*)`).eq('id', id).maybeSingle()
-  if (error) throw error
-  if (!data) return null
-  return { ...data, follow_ups: [...data.follow_ups].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)) }
+  const full = await supabase.from('referrals').select(`${referralFields}, follow_ups(*)`).eq('id', id).maybeSingle()
+  if (!full.error) {
+    if (!full.data) return null
+    return { ...full.data, follow_ups: [...(full.data.follow_ups || [])].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)) }
+  }
+  if (!isMissingSchemaError(full.error)) throw full.error
+
+  const basic = await supabase.from('referrals').select(`${baseReferralFields}, follow_ups(*)`).eq('id', id).maybeSingle()
+  if (basic.error) throw basic.error
+  if (!basic.data) return null
+  return { ...basic.data, follow_ups: [...(basic.data.follow_ups || [])].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)) }
 }
 
 export async function cancelReferral(id) {
@@ -185,16 +214,29 @@ export async function cancelReferral(id) {
     saveDemoDb(db)
     return hydrateDemoReferral(db, referral, true)
   }
-  const { data, error } = await supabase
+  const full = await supabase
     .from('referrals')
     .update({ status: 'cancelled' })
     .eq('id', id)
     .in('status', CANCELLABLE_STATUSES)
     .select(referralFields)
     .maybeSingle()
-  if (error) throw error
-  if (!data) throw new Error('This referral cannot be cancelled. It may have already ended or been updated.')
-  return data
+  if (!full.error) {
+    if (!full.data) throw new Error('This referral cannot be cancelled. It may have already ended or been updated.')
+    return full.data
+  }
+  if (!isMissingSchemaError(full.error)) throw full.error
+
+  const basic = await supabase
+    .from('referrals')
+    .update({ status: 'cancelled' })
+    .eq('id', id)
+    .in('status', CANCELLABLE_STATUSES)
+    .select(baseReferralFields)
+    .maybeSingle()
+  if (basic.error) throw basic.error
+  if (!basic.data) throw new Error('This referral cannot be cancelled. It may have already ended or been updated.')
+  return basic.data
 }
 
 export async function submitReferralFeedback(referralId, rating, comment) {
@@ -218,6 +260,9 @@ export async function submitReferralFeedback(referralId, rating, comment) {
     return referral.feedback
   }
   const { data, error } = await supabase.from('referrals').update({ feedback: payload }).eq('id', referralId).select('feedback').single()
+  if (isMissingSchemaError(error)) {
+    throw new Error('Feedback storage requires running supabase/schema.sql in your Supabase SQL Editor.')
+  }
   if (error) throw error
   return data.feedback
 }

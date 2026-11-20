@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/auth'
 import { useI18n } from '../context/i18n'
 import { setConsent, updateEquityProfile, withdrawSharing } from '../services/consentService'
+import { isCheckConstraintError, isMissingSchemaError } from '../lib/supabase'
 import Button from '../components/Button'
 
 export default function Consent() {
@@ -20,18 +21,30 @@ export default function Consent() {
     setBusy(true)
     setError('')
     try {
-      for (const type of ['retain_history', 'share_results', 'share_contact', 'share_physical_context', 'research_opt_in']) {
+      await setConsent(user.id, 'terms', true)
+      for (const type of ['share_results', 'share_contact']) {
         if (data.has(type)) await setConsent(user.id, type, true)
         else await withdrawSharing(user.id, type)
       }
-      await updateEquityProfile(user.id, {
-        age_group: data.get('age_group') || '',
-        gender: data.get('gender') || '',
-        nationality_group: data.get('nationality_group') || '',
-        language: data.get('language') || '',
-        geography: data.get('geography') || '',
-      })
-      await setConsent(user.id, 'terms', true)
+      for (const type of ['retain_history', 'share_physical_context', 'research_opt_in']) {
+        try {
+          if (data.has(type)) await setConsent(user.id, type, true)
+          else await withdrawSharing(user.id, type)
+        } catch (optErr) {
+          if (!isCheckConstraintError(optErr) && !isMissingSchemaError(optErr)) throw optErr
+        }
+      }
+      try {
+        await updateEquityProfile(user.id, {
+          age_group: data.get('age_group') || '',
+          gender: data.get('gender') || '',
+          nationality_group: data.get('nationality_group') || '',
+          language: data.get('language') || '',
+          geography: data.get('geography') || '',
+        })
+      } catch (eqErr) {
+        if (!isMissingSchemaError(eqErr) && !/supabase\/schema\.sql/i.test(eqErr?.message || '')) throw eqErr
+      }
       await Promise.all([refreshConsents(), refreshProfile()])
       navigate('/dashboard', { replace: true })
     } catch (err) {

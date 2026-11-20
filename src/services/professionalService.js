@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { isCheckConstraintError, isMissingSchemaError, supabase } from '../lib/supabase'
 import { STATUS, isActiveReferral } from './referralService'
 import { appendDemoAudit, demoGenerateId, loadDemoDb, saveDemoDb } from '../lib/demoStore'
 
@@ -76,14 +76,21 @@ async function hydrateSupabaseClinicianRows(rows) {
           referral.share_contact ? 'full_name' : null,
           referral.share_physical_context ? 'physical_context' : null,
         ].filter(Boolean).join(', ')
-        const result = await supabase
+        let result = await supabase
           .from('profiles')
           .select(cols)
           .eq('id', referral.user_id)
           .maybeSingle()
+        if (result.error && isMissingSchemaError(result.error) && referral.share_contact) {
+          result = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', referral.user_id)
+            .maybeSingle()
+        }
         if (!result.error && result.data) {
           if (referral.share_contact) profile = { full_name: result.data.full_name }
-          if (referral.share_physical_context) physical_context = result.data.physical_context
+          if (referral.share_physical_context) physical_context = result.data.physical_context ?? null
         }
       }
       if (referral.share_results) {
@@ -145,7 +152,10 @@ export async function listPrimaryCareCases() {
     .select('*, service:support_services(name, tier), follow_ups(*)')
     .eq('share_physical_context', true)
     .order('created_at', { ascending: false })
-  if (error) throw error
+  if (error) {
+    if (isMissingSchemaError(error)) return []
+    throw error
+  }
   return hydrateSupabaseClinicianRows(data)
 }
 
@@ -169,21 +179,32 @@ export async function updateReferralStatus(id, status, actorId = null) {
     saveDemoDb(db)
     return referral
   }
-  const { data: current, error: fetchErr } = await supabase
+  let currentRes = await supabase
     .from('referrals')
     .select('status, first_response_at')
     .eq('id', id)
     .single()
-  if (fetchErr) throw fetchErr
-  if (STATUS[current?.status]?.terminal) throw new Error('This referral is already closed and cannot be updated.')
+  let hasExtendedCols = true
+  if (currentRes.error && isMissingSchemaError(currentRes.error)) {
+    hasExtendedCols = false
+    currentRes = await supabase.from('referrals').select('status').eq('id', id).single()
+  }
+  if (currentRes.error) throw currentRes.error
+  if (STATUS[currentRes.data?.status]?.terminal) throw new Error('This referral is already closed and cannot be updated.')
   const updates = { status }
-  if (!current?.first_response_at && !['support_requested', 'submitted'].includes(status)) {
+  if (hasExtendedCols && !currentRes.data?.first_response_at && !['support_requested', 'submitted'].includes(status)) {
     updates.first_response_at = new Date().toISOString()
   }
-  if (status === 'appointment_attended') updates.attendance_status = 'attended'
-  const { data, error } = await supabase.from('referrals').update(updates).eq('id', id).select().single()
-  if (error) throw error
-  return data
+  if (hasExtendedCols && status === 'appointment_attended') updates.attendance_status = 'attended'
+  const fullUpdate = await supabase.from('referrals').update(updates).eq('id', id).select().single()
+  if (!fullUpdate.error) return fullUpdate.data
+  if (isMissingSchemaError(fullUpdate.error) || isCheckConstraintError(fullUpdate.error)) {
+    const legacyStatus = status === 'professional_review' ? 'accepted' : status
+    const basicUpdate = await supabase.from('referrals').update({ status: legacyStatus }).eq('id', id).select().single()
+    if (basicUpdate.error) throw basicUpdate.error
+    return basicUpdate.data
+  }
+  throw fullUpdate.error
 }
 
 export async function scheduleAppointment(referralId, { appointmentAt, appointmentMode, attendanceStatus, actorId }) {
@@ -327,7 +348,7 @@ export async function addFollowUp(referralId, note, outcome, outcomeStatus = '',
     saveDemoDb(db)
     return item
   }
-  const { data, error } = await supabase
+  const fullInsert = await supabase
     .from('follow_ups')
     .insert({
       referral_id: referralId,
@@ -338,8 +359,22 @@ export async function addFollowUp(referralId, note, outcome, outcomeStatus = '',
     })
     .select()
     .single()
-  if (error) throw error
-  return data
+  if (!fullInsert.error) return fullInsert.data
+  if (isMissingSchemaError(fullInsert.error)) {
+    const basicInsert = await supabase
+      .from('follow_ups')
+      .insert({
+        referral_id: referralId,
+        author_id: authorId || undefined,
+        note: cleanNote || null,
+        outcome: cleanOutcome || null,
+      })
+      .select()
+      .single()
+    if (basicInsert.error) throw basicInsert.error
+    return basicInsert.data
+  }
+  throw fullInsert.error
 }
 
 export async function reportAdverseEvent({ referralId, reportedBy, category, severity, summary, actionTaken }) {

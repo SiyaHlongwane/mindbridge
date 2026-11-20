@@ -85,10 +85,15 @@ create table if not exists public.support_services (
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
+alter table public.support_services add column if not exists eligibility text;
+alter table public.support_services add column if not exists languages text;
 alter table public.support_services add column if not exists location text;
 alter table public.support_services add column if not exists operating_hours text;
 alter table public.support_services add column if not exists appointment_method text;
+alter table public.support_services add column if not exists delivery_mode text;
+alter table public.support_services add column if not exists typical_wait text;
 alter table public.support_services add column if not exists availability text;
+alter table public.support_services add column if not exists geography text;
 alter table public.support_services add column if not exists last_verified_at text;
 alter table public.support_services drop constraint if exists support_services_tier_check;
 alter table public.support_services add constraint support_services_tier_check
@@ -117,11 +122,18 @@ create table if not exists public.referrals (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.referrals add column if not exists priority text not null default 'routine';
+alter table public.referrals add column if not exists crisis_flagged boolean not null default false;
 alter table public.referrals add column if not exists crisis_acknowledged_at timestamptz;
+alter table public.referrals add column if not exists crisis_completed_at timestamptz;
+alter table public.referrals add column if not exists first_response_at timestamptz;
 alter table public.referrals add column if not exists appointment_at timestamptz;
 alter table public.referrals add column if not exists appointment_mode text;
 alter table public.referrals add column if not exists attendance_status text not null default 'pending';
+alter table public.referrals add column if not exists share_physical_context boolean not null default false;
 alter table public.referrals add column if not exists feedback jsonb;
+alter table public.referrals drop constraint if exists referrals_priority_check;
+alter table public.referrals add constraint referrals_priority_check check (priority in ('routine','urgent'));
 alter table public.referrals drop constraint if exists referrals_status_check;
 alter table public.referrals add constraint referrals_status_check
   check (status in (
@@ -173,6 +185,7 @@ create table if not exists public.audit_logs (
   details jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+alter table public.audit_logs add column if not exists details jsonb not null default '{}'::jsonb;
 
 create index if not exists assessments_user_id_idx on public.assessments(user_id);
 create index if not exists referrals_user_id_idx on public.referrals(user_id);

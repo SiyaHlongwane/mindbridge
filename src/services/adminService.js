@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { isCheckConstraintError, isMissingSchemaError, supabase } from '../lib/supabase'
 import { SLA_HOURS, STATUS } from './referralService'
 import { TIERS } from './supportService'
 import { appendDemoAudit, demoGenerateId, loadDemoDb, saveDemoDb } from '../lib/demoStore'
@@ -45,9 +45,13 @@ export async function listUsersAndRoles() {
     const db = loadDemoDb()
     return db.users.map(u => ({ id: u.id, full_name: u.full_name, email: u.email, role: u.role, created_at: u.created_at }))
   }
-  const { data, error } = await supabase.from('profiles').select('id, email, full_name, role, created_at').order('created_at', { ascending: false })
-  if (error) throw error
-  return data
+  const full = await supabase.from('profiles').select('id, email, full_name, role, created_at').order('created_at', { ascending: false })
+  if (!full.error) return full.data
+  if (!isMissingSchemaError(full.error)) throw full.error
+
+  const basic = await supabase.from('profiles').select('id, full_name, role, created_at').order('created_at', { ascending: false })
+  if (basic.error) throw basic.error
+  return (basic.data || []).map(row => ({ ...row, email: null }))
 }
 
 export async function updateUserRole(targetUserId, newRole, actorId) {
@@ -97,24 +101,42 @@ export async function listAdminReferrals() {
         }
       })
   }
-  const { data, error } = await supabase
+  const full = await supabase
     .from('referrals')
     .select('id, user_id, status, priority, crisis_flagged, created_at, service:support_services(name), user:profiles!referrals_user_id_fkey(equity)')
     .order('created_at', { ascending: false })
-  if (error) throw error
-  return (data || []).map(r => {
-    const geography = r.user?.equity?.geography || 'Unspecified'
-    return {
-      id: r.id,
-      user_id: r.user_id,
-      status: r.status,
-      priority: r.priority || 'routine',
-      crisis_flagged: Boolean(r.crisis_flagged),
-      created_at: r.created_at,
-      service: r.service || null,
-      reference_label: `Ref #${r.id.slice(-6)} · ${geography}`,
-    }
-  })
+  if (!full.error) {
+    return (full.data || []).map(r => {
+      const geography = r.user?.equity?.geography || 'Unspecified'
+      return {
+        id: r.id,
+        user_id: r.user_id,
+        status: r.status,
+        priority: r.priority || 'routine',
+        crisis_flagged: Boolean(r.crisis_flagged),
+        created_at: r.created_at,
+        service: r.service || null,
+        reference_label: `Ref #${r.id.slice(-6)} · ${geography}`,
+      }
+    })
+  }
+  if (!isMissingSchemaError(full.error)) throw full.error
+
+  const basic = await supabase
+    .from('referrals')
+    .select('id, user_id, status, created_at, service:support_services(name)')
+    .order('created_at', { ascending: false })
+  if (basic.error) throw basic.error
+  return (basic.data || []).map(r => ({
+    id: r.id,
+    user_id: r.user_id,
+    status: r.status,
+    priority: 'routine',
+    crisis_flagged: false,
+    created_at: r.created_at,
+    service: r.service || null,
+    reference_label: `Ref #${r.id.slice(-6)}`,
+  }))
 }
 
 export async function acceptAdminReferral(id) {
@@ -130,23 +152,40 @@ export async function acceptAdminReferral(id) {
     saveDemoDb(db)
     return
   }
-  const { data: current, error: fetchErr } = await supabase
+  const currentRes = await supabase
     .from('referrals')
     .select('first_response_at')
     .eq('id', id)
     .maybeSingle()
-  if (fetchErr) throw fetchErr
+  const hasFirstResponseCol = !currentRes.error || !isMissingSchemaError(currentRes.error)
+  if (currentRes.error && hasFirstResponseCol) throw currentRes.error
+
   const updates = { status: 'professional_review' }
-  if (!current?.first_response_at) updates.first_response_at = now
-  const { data, error } = await supabase
+  if (hasFirstResponseCol && !currentRes.data?.first_response_at) updates.first_response_at = now
+  const full = await supabase
     .from('referrals')
     .update(updates)
     .eq('id', id)
     .in('status', ['support_requested', 'pending', 'submitted', 'received'])
     .select('id')
     .maybeSingle()
-  if (error) throw error
-  if (!data) throw new Error('This referral is no longer waiting.')
+  if (!full.error) {
+    if (!full.data) throw new Error('This referral is no longer waiting.')
+    return
+  }
+  if (isMissingSchemaError(full.error) || isCheckConstraintError(full.error)) {
+    const basic = await supabase
+      .from('referrals')
+      .update({ status: 'accepted' })
+      .eq('id', id)
+      .in('status', ['pending', 'submitted', 'received'])
+      .select('id')
+      .maybeSingle()
+    if (basic.error) throw basic.error
+    if (!basic.data) throw new Error('This referral is no longer waiting.')
+    return
+  }
+  throw full.error
 }
 
 export async function saveService(id, values) {
@@ -199,9 +238,22 @@ export async function saveService(id, values) {
   }
 
   const query = id ? supabase.from('support_services').update(fields).eq('id', id) : supabase.from('support_services').insert(fields)
-  const { data, error } = await query.select().single()
-  if (error) throw error
-  return data
+  const full = await query.select().single()
+  if (!full.error) return full.data
+  if (isMissingSchemaError(full.error)) {
+    const baseFields = {
+      name: fields.name,
+      tier: fields.tier,
+      description: fields.description,
+      contact: fields.contact,
+      website: fields.website,
+    }
+    const basicQuery = id ? supabase.from('support_services').update(baseFields).eq('id', id) : supabase.from('support_services').insert(baseFields)
+    const basic = await basicQuery.select().single()
+    if (basic.error) throw basic.error
+    return basic.data
+  }
+  throw full.error
 }
 
 export async function setServiceFlag(id, flag, value) {
@@ -218,9 +270,14 @@ export async function setServiceFlag(id, flag, value) {
   }
   const updates = { [flag]: value }
   if (flag === 'verified' && value) updates.last_verified_at = new Date().toISOString().slice(0, 10)
-  const { data, error } = await supabase.from('support_services').update(updates).eq('id', id).select().single()
-  if (error) throw error
-  return data
+  const full = await supabase.from('support_services').update(updates).eq('id', id).select().single()
+  if (!full.error) return full.data
+  if (isMissingSchemaError(full.error)) {
+    const basic = await supabase.from('support_services').update({ [flag]: value }).eq('id', id).select().single()
+    if (basic.error) throw basic.error
+    return basic.data
+  }
+  throw full.error
 }
 
 export async function listRecentAuditLogs() {
@@ -431,6 +488,9 @@ export async function getOutcomeAndSafetyMetrics(dateRangeDays = 30) {
   const { data, error } = await supabase.rpc('get_outcome_and_safety_metrics', {
     date_range_days: dateRangeDays,
   })
+  if (isMissingSchemaError(error)) {
+    throw new Error('Population analytics requires running supabase/schema.sql in your Supabase SQL Editor to install get_outcome_and_safety_metrics().')
+  }
   if (error) throw error
   return data
 }

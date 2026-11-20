@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { isCheckConstraintError, isMissingSchemaError, supabase } from '../lib/supabase'
 import { appendDemoAudit, loadDemoDb, saveDemoDb } from '../lib/demoStore'
 
 export const OPTIONAL_SHARING_TYPES = [
@@ -72,7 +72,7 @@ export async function withdrawSharing(userId, type) {
       .update({ [type]: false })
       .eq('user_id', userId)
       .in('status', activeStatuses)
-    if (error) throw error
+    if (error && !isMissingSchemaError(error)) throw error
   }
   await setConsent(userId, type, false)
 }
@@ -109,6 +109,9 @@ export async function updatePhysicalContext(userId, physicalContext) {
     }
   }
   const { error } = await supabase.from('profiles').update({ physical_context: merged }).eq('id', userId)
+  if (isMissingSchemaError(error)) {
+    throw new Error('Saving physical health context requires running supabase/schema.sql in your Supabase SQL Editor.')
+  }
   if (error) throw error
   return merged
 }
@@ -130,6 +133,9 @@ export async function updateEquityProfile(userId, equity) {
     return normalized
   }
   const { error } = await supabase.from('profiles').update({ equity: normalized }).eq('id', userId)
+  if (isMissingSchemaError(error)) {
+    throw new Error('Saving optional equity preferences requires running supabase/schema.sql in your Supabase SQL Editor.')
+  }
   if (error) throw error
   return normalized
 }
@@ -170,8 +176,12 @@ export async function eraseMyWellbeingData(userId) {
   const { error: asmErr } = await supabase.from('assessments').delete().eq('user_id', userId)
   if (asmErr) throw asmErr
   const { error: profErr } = await supabase.from('profiles').update({ physical_context: null, equity: {} }).eq('id', userId)
-  if (profErr) throw profErr
+  if (profErr && !isMissingSchemaError(profErr)) throw profErr
   for (const type of OPTIONAL_SHARING_TYPES) {
-    await setConsent(userId, type, false)
+    try {
+      await setConsent(userId, type, false)
+    } catch (err) {
+      if (!isCheckConstraintError(err)) throw err
+    }
   }
 }

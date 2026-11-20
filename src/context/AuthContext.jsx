@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { supabase, supabaseKeyError } from '../lib/supabase'
+import { isMissingSchemaError, supabase, supabaseKeyError } from '../lib/supabase'
 import {
   buildDemoSession,
   demoResetPassword,
@@ -14,6 +14,19 @@ import { AuthContext } from './auth'
 import { getConsentRecords } from '../services/consentService'
 
 const PROFILE_FIELDS = 'id, email, full_name, role, physical_context, equity'
+const BASE_PROFILE_FIELDS = 'id, full_name, role'
+
+function normalizeProfile(row, session = null) {
+  if (!row) return null
+  return {
+    id: row.id,
+    email: row.email ?? session?.user?.email ?? '',
+    full_name: row.full_name ?? session?.user?.user_metadata?.full_name ?? '',
+    role: row.role || 'individual',
+    physical_context: row.physical_context ?? null,
+    equity: row.equity && typeof row.equity === 'object' ? row.equity : {},
+  }
+}
 
 async function loadConsents(id) {
   const rows = await getConsentRecords(id)
@@ -36,14 +49,27 @@ function fallbackProfileFromSession(session) {
   }
 }
 
-async function fetchOrProvisionProfile(session) {
-  const { data, error } = await supabase
+async function selectProfileRow(userId, session = null) {
+  const full = await supabase
     .from('profiles')
     .select(PROFILE_FIELDS)
-    .eq('id', session.user.id)
+    .eq('id', userId)
     .maybeSingle()
-  if (error) throw error
-  if (data) return data
+  if (!full.error) return normalizeProfile(full.data, session)
+  if (!isMissingSchemaError(full.error)) throw full.error
+
+  const basic = await supabase
+    .from('profiles')
+    .select(BASE_PROFILE_FIELDS)
+    .eq('id', userId)
+    .maybeSingle()
+  if (basic.error) throw basic.error
+  return normalizeProfile(basic.data, session)
+}
+
+async function fetchOrProvisionProfile(session) {
+  const existing = await selectProfileRow(session.user.id, session)
+  if (existing) return existing
 
   const seed = {
     id: session.user.id,
@@ -51,12 +77,29 @@ async function fetchOrProvisionProfile(session) {
     full_name: session.user.user_metadata?.full_name || null,
     role: 'individual',
   }
-  const { data: created, error: insertError } = await supabase
+  const fullInsert = await supabase
     .from('profiles')
     .upsert(seed, { onConflict: 'id' })
     .select(PROFILE_FIELDS)
     .maybeSingle()
-  if (!insertError && created) return created
+  if (!fullInsert.error && fullInsert.data) return normalizeProfile(fullInsert.data, session)
+
+  if (isMissingSchemaError(fullInsert.error)) {
+    const basicInsert = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: session.user.id,
+          full_name: session.user.user_metadata?.full_name || null,
+          role: 'individual',
+        },
+        { onConflict: 'id' }
+      )
+      .select(BASE_PROFILE_FIELDS)
+      .maybeSingle()
+    if (!basicInsert.error && basicInsert.data) return normalizeProfile(basicInsert.data, session)
+  }
+
   return fallbackProfileFromSession(session)
 }
 
@@ -116,9 +159,13 @@ export function AuthProvider({ children }) {
       setAuth(loadDemoProfileState(userId))
       return
     }
-    const { data, error } = await supabase.from('profiles').select(PROFILE_FIELDS).eq('id', userId).maybeSingle()
-    if (!error && data) {
-      setAuth(prev => ({ ...prev, profile: data, role: data.role || 'individual' }))
+    try {
+      const data = await selectProfileRow(userId)
+      if (data) {
+        setAuth(prev => ({ ...prev, profile: data, role: data.role || 'individual', profileError: '' }))
+      }
+    } catch {
+      // keep existing profile state on transient failure
     }
   }, [userId])
 

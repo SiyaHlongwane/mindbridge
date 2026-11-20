@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { isCheckConstraintError, isMissingSchemaError, supabase } from '../lib/supabase'
 import { scoreAssessment } from '../data/instruments'
 import { appendDemoAudit, demoGenerateId, loadDemoDb, saveDemoDb } from '../lib/demoStore'
 
@@ -58,7 +58,7 @@ export async function saveAssessment(userId, instrumentId, answers, extras = {})
     return record
   }
 
-  const { data, error } = await supabase
+  const fullInsert = await supabase
     .from('assessments')
     .insert({
       user_id: userId,
@@ -71,8 +71,33 @@ export async function saveAssessment(userId, instrumentId, answers, extras = {})
     })
     .select()
     .single()
-  if (error) throw error
-  return data
+  if (!fullInsert.error) return fullInsert.data
+
+  if (isMissingSchemaError(fullInsert.error)) {
+    const basicInsert = await supabase
+      .from('assessments')
+      .insert({
+        user_id: userId,
+        instrument: instrumentId,
+        total_score: total,
+        severity,
+        answers,
+      })
+      .select()
+      .single()
+    if (!basicInsert.error) {
+      return { ...basicInsert.data, functioning: null, opt_in_signals: [] }
+    }
+    if (isCheckConstraintError(basicInsert.error)) {
+      throw new Error(`Your Supabase database needs supabase/schema.sql to be run in SQL Editor to save ${instrumentId} assessments. PHQ-9 and GAD-7 work immediately.`)
+    }
+    throw basicInsert.error
+  }
+
+  if (isCheckConstraintError(fullInsert.error)) {
+    throw new Error(`Your Supabase database needs supabase/schema.sql to be run in SQL Editor to save ${instrumentId} assessments. PHQ-9 and GAD-7 work immediately.`)
+  }
+  throw fullInsert.error
 }
 
 export async function listAssessments(userId) {
@@ -82,13 +107,21 @@ export async function listAssessments(userId) {
       .filter(row => row.user_id === userId)
       .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
   }
-  const { data, error } = await supabase
+  const full = await supabase
     .from('assessments')
     .select('id, instrument, total_score, severity, functioning, opt_in_signals, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-  if (error) throw error
-  return data
+  if (!full.error) return full.data
+  if (!isMissingSchemaError(full.error)) throw full.error
+
+  const basic = await supabase
+    .from('assessments')
+    .select('id, instrument, total_score, severity, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+  if (basic.error) throw basic.error
+  return (basic.data || []).map(row => ({ ...row, functioning: null, opt_in_signals: [] }))
 }
 
 export async function getAssessment(userId, id) {
